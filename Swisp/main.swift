@@ -38,9 +38,9 @@ func eval(_ x: Expression, env: inout Environment) throws -> Expression {
         case .some(.symbol(value: "if")):
             let (test, conseq, alt) = (value[1], value[2], value[3])
             if case .list(let resultValue) = try eval(test, env: &env), resultValue.isEmpty {
-                return alt
+                return try eval(alt, env: &env)
             } else {
-                return conseq
+                return try eval(conseq, env: &env)
             }
         case .some(.symbol(value: "define")):
             if case .symbol(let name) = value[1] {
@@ -131,11 +131,11 @@ func standardEnvironment() -> Environment {
         "-":       .proc(value: subtract),
         "*":       .proc(value: multiply),
         "/":       .proc(value: divide),
-//        ">":       op.gt,
-//        "<":       op.lt,
-//        ">=":      op.ge,
-//        "<=":      op.le,
-//        "=":       op.eq,
+        ">":       .proc(value: comparisonProc(>)),
+        "<":       .proc(value: comparisonProc(<)),
+        ">=":      .proc(value: comparisonProc(>=)),
+        "<=":      .proc(value: comparisonProc(<=)),
+        "=":       .proc(value: comparisonProc(==)),
 //        "abs":     abs,
 //        "append":  op.add,
 //        "apply":   apply,
@@ -159,8 +159,6 @@ func standardEnvironment() -> Environment {
 //        "symbol?": lambda x: isinstance(x, Symbol),
     ])
 }
-
-//typealias Environment = [String: Expression]
 
 class Environment: CustomDebugStringConvertible {
 

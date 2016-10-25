@@ -46,6 +46,23 @@ func divide(_ args: [Expression]) throws -> Expression {
     return .number(value: result)
 }
 
+func comparisonProc(_ comparison: @escaping (Decimal, Decimal) -> Bool) -> ([Expression]) throws -> Expression {
+    return { args in
+        let numbers = try asNumbers(args)
+        if numbers.count < 2 {
+            throw SwispError.arityError(description: "Expected at least 2 arguments")
+        }
+
+        let result = zip(numbers, numbers.suffix(from: 1)).map(comparison).reduce(true) { $0 && $1 }
+        if result {
+            return args.last!
+        } else {
+            return .list(value: [])
+        }
+    }
+
+}
+
 func asNumbers(_ args: [Expression]) throws -> [Decimal] {
     return try args.map { arg in
         if case .number(let value) = arg {
