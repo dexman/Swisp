@@ -14,8 +14,8 @@ func repl(prompt: String = "swisp> ") {
         do {
             print(prompt, terminator: "")
             guard let input = readLine() else { break }
-            let val = try eval(parse(input), env: globalEnvironment)
-            print(val)
+            let value = try eval(parse(input), env: globalEnvironment).run()
+            print(value)
         } catch {
             print("swisp error: \(error)")
         }
@@ -23,55 +23,65 @@ func repl(prompt: String = "swisp> ") {
 }
 
 /// Evaluate an expression in an environment.
-func eval(_ x: Expression, env: Environment) throws -> Expression {
-    switch x {
-    case .symbol(let value):
-        return env[value] ?? .list([])
-    case .number:
-        return x
-    case .proc:
-        return x
-    case .list(let value):
-        switch value.first {
-        case .some(.symbol("quote")):
-            return .list(Array(value.suffix(from: 1)))
-        case .some(.symbol("if")):
-            let (test, conseq, alt) = (value[1], value[2], value[3])
-            if case .list(let resultValue) = try eval(test, env: env), resultValue.isEmpty {
-                return try eval(alt, env: env)
-            } else {
-                return try eval(conseq, env: env)
+func eval(_ x: Expression, env: Environment) -> Trampoline<Expression> {
+    do {
+        switch x {
+        case .symbol(let value):
+            guard let result = env[value] else {
+                throw SwispError.undefinedIdentifier(description: "undefined identifier \(value)")
             }
-        case .some(.symbol("define")):
-            if case .symbol(let name) = value[1] {
-                env[name] = try eval(value[2], env: env)
+            return .result(result)
+        case .number:
+            return .result(x)
+        case .proc:
+            return .result(x)
+        case .list(let value):
+            switch value.first {
+            case .some(.symbol("quote")):
+                return .result(.list(Array(value.suffix(from: 1))))
+            case .some(.symbol("if")):
+                let (test, conseq, alt) = (value[1], value[2], value[3])
+                if case .list(let resultValue) = try eval(test, env: env).run(), resultValue.isEmpty {
+                    return .result(try eval(alt, env: env).run())
+                } else {
+                    return .result(try eval(conseq, env: env).run())
+                }
+            case .some(.symbol("define")):
+                if case .symbol(let name) = value[1] {
+                    env[name] = try eval(value[2], env: env).run()
+                }
+                return .result(value[2])
+            case .some(.symbol("set!")):
+                if case .symbol(let name) = value[1] {
+                    env[name] = try eval(value[2], env: env).run()
+                }
+                throw SwispError.syntaxError(description: "Bad syntax")
+            case .some(.symbol("lambda")):
+                if case .list(let parameters) = value[1] {
+                    return .result(.proc(.interpreted(
+                        parameters: try asSymbols(parameters),
+                        body: Array(value.suffix(from: 2)))))
+                }
+                throw SwispError.syntaxError(description: "Bad syntax")
+            case .some(let procName):
+                let result = try eval(procName, env: env).run()
+                if case .proc(let procedure) = result {
+                    let arguments = try value.suffix(from: 1).map { try eval($0, env: env).run() }
+                    switch procedure {
+                    case .native(let f):
+                        return .result(try f(arguments))
+                    case .interpreted(let parameters, let body):
+                        let procEnv = Environment(parent: env, values: Dictionary(keys: parameters, values: arguments))
+                        return .call { eval(body.first!, env: procEnv) }
+                    }
+                }
+                throw SwispError.applicationError(description: "Not a procedure: \(procName)")
+            default:
+                throw SwispError.applicationError(description: "Not a procedure: \(value.first)")
             }
-            return value[2]
-        case .some(.symbol("set!")):
-            if case .symbol(let name) = value[1] {
-                env[name] = try eval(value[2], env: env)
-            }
-            throw SwispError.syntaxError(description: "Bad syntax")
-        case .some(.symbol("lambda")):
-            if case .list(let parameters) = value[1] {
-                let parameterNames = try asSymbols(parameters)
-                let body = value[2]
-                return .proc({ args in
-                    let argumentBindings = Dictionary(keys: parameterNames, values: args)
-                    let procEnv = Environment(parent: env, values: argumentBindings)
-                    return try eval(body, env: procEnv)
-                })
-            }
-            throw SwispError.syntaxError(description: "Bad syntax")
-        case .some(let procName):
-            if case .proc(let proc) = try eval(procName, env: env) {
-                let args = try value.suffix(from: 1).map { try eval($0, env: env) }
-                return try proc(args)
-            }
-            throw SwispError.applicationError(description: "Not a procedure: \(procName)")
-        default:
-            throw SwispError.applicationError(description: "Not a procedure: \(value.first)")
         }
+    } catch {
+        return .error(error)
     }
 }
 
@@ -125,19 +135,19 @@ func standardEnvironment() -> Environment {
     return Environment(values: [
         // env.update(vars(math)) # sin, cos, sqrt, pi, ...
         "pi":      .number(Decimal(Double.pi)),
-        "+":       .proc(add),
-        "-":       .proc(subtract),
-        "*":       .proc(multiply),
-        "/":       .proc(divide),
-        ">":       .proc(comparisonProc(>)),
-        "<":       .proc(comparisonProc(<)),
-        ">=":      .proc(comparisonProc(>=)),
-        "<=":      .proc(comparisonProc(<=)),
-        "=":       .proc(comparisonProc(==)),
+        "+":       .proc(.native(add)),
+        "-":       .proc(.native(subtract)),
+        "*":       .proc(.native(multiply)),
+        "/":       .proc(.native(divide)),
+        ">":       .proc(.native(comparisonProc(>))),
+        "<":       .proc(.native(comparisonProc(<))),
+        ">=":      .proc(.native(comparisonProc(>=))),
+        "<=":      .proc(.native(comparisonProc(<=))),
+        "=":       .proc(.native(comparisonProc(==))),
 //        "abs":     abs,
 //        "append":  op.add,
 //        "apply":   apply,
-        "begin":   .proc({ (x: [Expression]) in x.last! })
+//        "begin":   .proc({ (x: [Expression]) in x.last! })
 //        "car":     lambda x: x[0],
 //        "cdr":     lambda x: x[1:],
 //        "cons":    lambda x,y: [x] + y,
@@ -158,6 +168,30 @@ func standardEnvironment() -> Environment {
     ])
 }
 
+/// Contains either the result of a procedure call, an error, or the next procedure call to make.
+enum Trampoline<V> {
+
+    case result(V)
+    case error(Error)
+    case call(() -> Trampoline)
+
+    func run() throws -> V {
+        var trampoline = self
+        while true {
+            switch trampoline {
+            case .call(let proc):
+                trampoline = proc()
+            case .error(let error):
+                throw error
+            case .result(let value):
+                return value
+            }
+        }
+    }
+    
+}
+
+/// Linked list of contexts for evaluations.
 class Environment: CustomDebugStringConvertible {
 
     init(parent: Environment? = nil, values: [String: Expression] = [:]) {
@@ -188,7 +222,7 @@ enum Expression: CustomDebugStringConvertible {
     case number(Decimal)
     case symbol(String)
     case list([Expression])
-    case proc(([Expression]) throws -> Expression)
+    case proc(Procedure)
 
     var debugDescription: String {
         switch self {
@@ -205,27 +239,24 @@ enum Expression: CustomDebugStringConvertible {
 
 }
 
+enum Procedure {
+
+    case native(([Expression]) throws -> Expression)
+    case interpreted(parameters: [String], body: [Expression])
+
+}
+
 enum SwispError: Error {
 
     case syntaxError(description: String)
     case applicationError(description: String)
     case typeError(description: String)
     case arityError(description: String)
+    case undefinedIdentifier(description: String)
 
 }
 
 var globalEnvironment = standardEnvironment()
-//let program = "(begin (define r 10) (* pi (* r)))"
-//do {
-//    var program = "(define circle-area (lambda (r) (* pi (* r r))))"
-//    print("result=\(try eval(parse(program), env: globalEnvironment))")
-//    print("env=\(globalEnvironment)")
-//
-//    program = "(circle-area 3)"
-//    print("result=\(try eval(parse(program), env: globalEnvironment))")
-//    print("env=\(globalEnvironment)")
-//} catch {
-//    print("failed=\(error)")
-//}
+
 repl()
 
