@@ -14,7 +14,7 @@ func repl(prompt: String = "swisp> ") {
         do {
             print(prompt, terminator: "")
             guard let input = readLine() else { break }
-            let val = try eval(parse(input), env: &globalEnvironment)
+            let val = try eval(parse(input), env: globalEnvironment)
             print(val)
         } catch {
             print("swisp error: \(error)")
@@ -23,7 +23,7 @@ func repl(prompt: String = "swisp> ") {
 }
 
 /// Evaluate an expression in an environment.
-func eval(_ x: Expression, env: inout Environment) throws -> Expression {
+func eval(_ x: Expression, env: Environment) throws -> Expression {
     switch x {
     case .symbol(let value):
         return env[value] ?? .list(value: [])
@@ -37,37 +37,35 @@ func eval(_ x: Expression, env: inout Environment) throws -> Expression {
             return .list(value: Array(value.suffix(from: 1)))
         case .some(.symbol(value: "if")):
             let (test, conseq, alt) = (value[1], value[2], value[3])
-            if case .list(let resultValue) = try eval(test, env: &env), resultValue.isEmpty {
-                return try eval(alt, env: &env)
+            if case .list(let resultValue) = try eval(test, env: env), resultValue.isEmpty {
+                return try eval(alt, env: env)
             } else {
-                return try eval(conseq, env: &env)
+                return try eval(conseq, env: env)
             }
         case .some(.symbol(value: "define")):
             if case .symbol(let name) = value[1] {
-                env[name] = try eval(value[2], env: &env)
+                env[name] = try eval(value[2], env: env)
             }
             return value[2]
         case .some(.symbol(value: "set!")):
             if case .symbol(let name) = value[1] {
-                env[name] = try eval(value[2], env: &env)
+                env[name] = try eval(value[2], env: env)
             }
             throw SwispError.syntaxError(description: "Bad syntax")
         case .some(.symbol(value: "lambda")):
             if case .list(let parameters) = value[1] {
                 let parameterNames = try asSymbols(parameters)
                 let body = value[2]
-                let parentEnvironment = Environment(parent: env)
                 return .proc(value: { args in
-                    var procEnv = Environment(
-                        parent: parentEnvironment,
-                        values: zip(parameterNames, args).reduce([:]) { var r = $0; r[$1.0] = $1.1; return r })
-                    return try eval(body, env: &procEnv)
+                    let argumentBindings = Dictionary(keys: parameterNames, values: args)
+                    let procEnv = Environment(parent: env, values: argumentBindings)
+                    return try eval(body, env: procEnv)
                 })
             }
             throw SwispError.syntaxError(description: "Bad syntax")
         case .some(let procName):
-            if case .proc(let proc) = try eval(procName, env: &env) {
-                let args = try value.suffix(from: 1).map { try eval($0, env: &env) }
+            if case .proc(let proc) = try eval(procName, env: env) {
+                let args = try value.suffix(from: 1).map { try eval($0, env: env) }
                 return try proc(args)
             }
             throw SwispError.applicationError(description: "Not a procedure: \(procName)")
@@ -220,11 +218,11 @@ var globalEnvironment = standardEnvironment()
 //let program = "(begin (define r 10) (* pi (* r)))"
 //do {
 //    var program = "(define circle-area (lambda (r) (* pi (* r r))))"
-//    print("result=\(try eval(parse(program), env: &globalEnvironment))")
+//    print("result=\(try eval(parse(program), env: globalEnvironment))")
 //    print("env=\(globalEnvironment)")
 //
 //    program = "(circle-area 3)"
-//    print("result=\(try eval(parse(program), env: &globalEnvironment))")
+//    print("result=\(try eval(parse(program), env: globalEnvironment))")
 //    print("env=\(globalEnvironment)")
 //} catch {
 //    print("failed=\(error)")
