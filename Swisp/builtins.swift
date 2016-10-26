@@ -11,7 +11,7 @@ import Foundation
 func add(_ args: [Expression]) throws -> Expression {
     let numbers = try asNumbers(args)
     let result = numbers.reduce(Decimal(0), +)
-    return .number(value: result)
+    return .number(result)
 }
 
 func subtract(_ args: [Expression]) throws -> Expression {
@@ -24,13 +24,13 @@ func subtract(_ args: [Expression]) throws -> Expression {
     }
     let remainingValues = numbers.suffix(from: 1)
     let result = remainingValues.reduce(initialValue, -)
-    return .number(value: result)
+    return .number(result)
 }
 
 func multiply(_ args: [Expression]) throws -> Expression {
     let numbers = try asNumbers(args)
     let result = numbers.reduce(Decimal(1), *)
-    return .number(value: result)
+    return .number(result)
 }
 
 func divide(_ args: [Expression]) throws -> Expression {
@@ -43,7 +43,7 @@ func divide(_ args: [Expression]) throws -> Expression {
     }
     let remainingValues = numbers.suffix(from: 1)
     let result = remainingValues.reduce(initialValue, /)
-    return .number(value: result)
+    return .number(result)
 }
 
 func comparisonProc(_ comparison: @escaping (Decimal, Decimal) -> Bool) -> ([Expression]) throws -> Expression {
@@ -57,7 +57,7 @@ func comparisonProc(_ comparison: @escaping (Decimal, Decimal) -> Bool) -> ([Exp
         if result {
             return args.last!
         } else {
-            return .list(value: [])
+            return .list([])
         }
     }
 

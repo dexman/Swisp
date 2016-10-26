@@ -26,37 +26,37 @@ func repl(prompt: String = "swisp> ") {
 func eval(_ x: Expression, env: Environment) throws -> Expression {
     switch x {
     case .symbol(let value):
-        return env[value] ?? .list(value: [])
+        return env[value] ?? .list([])
     case .number:
         return x
     case .proc:
         return x
     case .list(let value):
         switch value.first {
-        case .some(.symbol(value: "quote")):
-            return .list(value: Array(value.suffix(from: 1)))
-        case .some(.symbol(value: "if")):
+        case .some(.symbol("quote")):
+            return .list(Array(value.suffix(from: 1)))
+        case .some(.symbol("if")):
             let (test, conseq, alt) = (value[1], value[2], value[3])
             if case .list(let resultValue) = try eval(test, env: env), resultValue.isEmpty {
                 return try eval(alt, env: env)
             } else {
                 return try eval(conseq, env: env)
             }
-        case .some(.symbol(value: "define")):
+        case .some(.symbol("define")):
             if case .symbol(let name) = value[1] {
                 env[name] = try eval(value[2], env: env)
             }
             return value[2]
-        case .some(.symbol(value: "set!")):
+        case .some(.symbol("set!")):
             if case .symbol(let name) = value[1] {
                 env[name] = try eval(value[2], env: env)
             }
             throw SwispError.syntaxError(description: "Bad syntax")
-        case .some(.symbol(value: "lambda")):
+        case .some(.symbol("lambda")):
             if case .list(let parameters) = value[1] {
                 let parameterNames = try asSymbols(parameters)
                 let body = value[2]
-                return .proc(value: { args in
+                return .proc({ args in
                     let argumentBindings = Dictionary(keys: parameterNames, values: args)
                     let procEnv = Environment(parent: env, values: argumentBindings)
                     return try eval(body, env: procEnv)
@@ -94,7 +94,7 @@ func readExpression(from tokens: inout [String]) throws -> Expression {
             list.append(try readExpression(from: &tokens))
         }
         tokens.removeFirst() // remove ")"
-        return .list(value: list)
+        return .list(list)
     case ")":
         throw SwispError.syntaxError(description: "unexpected )")
     default:
@@ -105,9 +105,9 @@ func readExpression(from tokens: inout [String]) throws -> Expression {
 /// Numbers become numbers; every other token is a symbol.
 func atom(_ token: String) -> Expression {
     if let number = Decimal(string: token, locale: nil), !["+", "-"].contains(token) {
-        return .number(value: number)
+        return .number(number)
     } else {
-        return .symbol(value: token)
+        return .symbol(token)
     }
 }
 
@@ -124,20 +124,20 @@ func tokenize(_ chars: String) -> [String] {
 func standardEnvironment() -> Environment {
     return Environment(values: [
         // env.update(vars(math)) # sin, cos, sqrt, pi, ...
-        "pi":      .number(value: Decimal(Double.pi)),
-        "+":       .proc(value: add),
-        "-":       .proc(value: subtract),
-        "*":       .proc(value: multiply),
-        "/":       .proc(value: divide),
-        ">":       .proc(value: comparisonProc(>)),
-        "<":       .proc(value: comparisonProc(<)),
-        ">=":      .proc(value: comparisonProc(>=)),
-        "<=":      .proc(value: comparisonProc(<=)),
-        "=":       .proc(value: comparisonProc(==)),
+        "pi":      .number(Decimal(Double.pi)),
+        "+":       .proc(add),
+        "-":       .proc(subtract),
+        "*":       .proc(multiply),
+        "/":       .proc(divide),
+        ">":       .proc(comparisonProc(>)),
+        "<":       .proc(comparisonProc(<)),
+        ">=":      .proc(comparisonProc(>=)),
+        "<=":      .proc(comparisonProc(<=)),
+        "=":       .proc(comparisonProc(==)),
 //        "abs":     abs,
 //        "append":  op.add,
 //        "apply":   apply,
-        "begin":   .proc(value: { (x: [Expression]) in x.last! })
+        "begin":   .proc({ (x: [Expression]) in x.last! })
 //        "car":     lambda x: x[0],
 //        "cdr":     lambda x: x[1:],
 //        "cons":    lambda x,y: [x] + y,
@@ -185,10 +185,10 @@ class Environment: CustomDebugStringConvertible {
 
 enum Expression: CustomDebugStringConvertible {
 
-    case number(value: Decimal)
-    case symbol(value: String)
-    case list(value: [Expression])
-    case proc(value: ([Expression]) throws -> Expression)
+    case number(Decimal)
+    case symbol(String)
+    case list([Expression])
+    case proc(([Expression]) throws -> Expression)
 
     var debugDescription: String {
         switch self {
